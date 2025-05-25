@@ -103,6 +103,34 @@ class TestBootloader:
         # First bytes should be 'FA' (cli instruction)
         assert b"FA" in lines[0], "Expected boot sector data"
     
+    def test_cpu_command(self, qemu_runner, output_dir):
+        """Test CPU info command"""
+        boot_image = Path("../src/boot/boot.bin")
+        qemu_runner.start(boot_image)
+        
+        # Wait for boot
+        qemu_runner.read_until("Ready for commands", timeout=2)
+        
+        # Send CPU info command
+        qemu_runner.send('c')
+        
+        # Read response
+        lines = []
+        for _ in range(5):  # Read several lines
+            line = qemu_runner.read_line(timeout=1)
+            if line:
+                lines.append(line)
+        
+        # Save output
+        with open(output_dir / "serial_cpu.txt", "wb") as f:
+            for line in lines:
+                f.write(line + b"\n")
+        
+        # Verify CPU info output
+        assert any(b"CPU Information" in line for line in lines), "CPU header not found"
+        # Should show either vendor info or "CPUID not supported"
+        assert any(b"Vendor:" in line or b"CPUID not supported" in line for line in lines), "No CPU info output"
+    
     def test_self_test(self, qemu_runner, output_dir):
         """Test built-in self test"""
         boot_image = Path("../src/boot/boot.bin")
@@ -154,7 +182,7 @@ class TestBootloader:
         
         # Read help text
         lines = []
-        for _ in range(8):  # Expect several lines
+        for _ in range(9):  # Expect more lines now with CPU command
             line = qemu_runner.read_line(timeout=0.5)
             if line:
                 lines.append(line)
@@ -168,3 +196,4 @@ class TestBootloader:
         assert any(b"Commands:" in line for line in lines)
         assert any(b"Ping" in line for line in lines)
         assert any(b"Info" in line for line in lines)
+        assert any(b"CPU info" in line for line in lines), "CPU command not in help"
